@@ -45,11 +45,58 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a
 	return true;
 }
 
+class DataHandler
+{
+public:
+	static inline RE::SpellItem* intro;
+	static inline RE::SpellItem* Pre_Holder;
+	static inline RE::SpellItem* model;
+
+	static void init()
+	{
+		auto handler = RE::TESDataHandler::GetSingleton();
+		intro = handler->LookupForm<RE::SpellItem>(0xD73, "Woof_Woof_Auf.esl"sv);
+		Pre_Holder = handler->LookupForm<RE::SpellItem>(0xD70, "Woof_Woof_Auf.esl"sv);
+		model = handler->LookupForm<RE::SpellItem>(0xD68, "Woof_Woof_Auf.esl"sv);
+	}
+};
+
+class SprintHandlerHook
+{
+	static RE::BSEventNotifyControl ProcessAnimEvent(RE::BSTEventSink<RE::BSAnimationGraphEvent>* _this,
+		const RE::BSAnimationGraphEvent* a_event, RE::BSTEventSource<RE::BSAnimationGraphEvent>* a_eventSource)
+	{
+		if (a_event && a_event->holder) {
+			if (auto a = const_cast<RE::Actor*>(a_event->holder->As<RE::Actor>())) {
+				if (a_event->tag == "StartAnimatedCameraDelta" && a->HasSpell(DataHandler::Pre_Holder)) {
+					FenixUtils::cast_spell(a, a, DataHandler::intro);
+					//FenixUtils::cast_spell(a, a, DataHandler::model);
+				}
+
+				if (a_event->tag == "EndAnimatedCameraDelta") {
+					a->RemoveSpell(DataHandler::model);
+				}
+			}
+		}
+
+		return _ProcessAnimEvent(_this, a_event, a_eventSource);
+	}
+	
+	static inline REL::Relocation<decltype(ProcessAnimEvent)> _ProcessAnimEvent;
+
+public:
+	static void Hook()
+	{
+		_ProcessAnimEvent = REL::Relocation<uintptr_t>(RE::VTABLE_PlayerCharacter[2]).write_vfunc(0x1, ProcessAnimEvent);
+	}
+};
+
 static void SKSEMessageHandler(SKSE::MessagingInterface::Message* message)
 {
 	switch (message->type) {
 	case SKSE::MessagingInterface::kDataLoaded:
-		//
+		DataHandler::init();
+		SprintHandlerHook::Hook();
 
 		break;
 	}
